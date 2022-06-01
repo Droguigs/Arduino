@@ -1,3 +1,4 @@
+//MODIFICAÇÕES LUAN: DECIMAL PARA BINARIO, BINARIO PARA DECIMAL, DECIMAL PARA OCTAL
 #include <Keypad.h>
 #include <LiquidCrystal.h>
 #include <math.h>
@@ -15,6 +16,9 @@ void binaryToDecimalCalculator();
 void binaryToOctalCalculator();
 void octalToBinaryCalculator();
 void octalToDecimalCalculator();
+int calculaDecimalParaBinario(int n);
+int calculaBinarioParaDecimal(int n);
+int decimalToOctalCalculator(int n);
 void print(int number);
 void changeMode();
 long SecondNumber();
@@ -312,20 +316,120 @@ void binaryCalculator() {
   }
 }
 
-void octalCalculator() {
+// void octalCalculator() {
+//
+// }
+
+
+// funções para conversão
+int calculaDecimalParaBinario(int n){
+  if(n == 0){
+    printf("%d", n);
+
+  }else{
+    binario(n/2);
+    printf("%d", n % 2);
+  }
+
+}
+
+int calculaBinarioParaDecimal(int n ){
+  if(n < 2) {
+    return 1;
+  } else{
+    return 2 * calculaBinarioParaDecimal(n / 10) + n % 10;
+  }
+
+}
+
+int calculaDecimalParaOctal(int n){
+   if(n > 8){
+     return n;
+   }else{
+     return calculaDecimalParaOctal(n/8) * 10 + n % 8;
+   }
 
 }
 
 void decimalToBinaryCalculator() {
+  keyEntry();
+  switch(key) {
+  // case '0' ... '1': // This keeps collecting the first value until a operator is pressed "+-*/"
+  //   lcd.setCursor(0,0);
+  //   first = first * 10 + (key - '0');
+  //   lcd.print(first);
+  //   break;
 
+  case '=':
+    // first = (total != 0 ? total : first);
+    lcd.print("dec to bin");
+    second = SecondNumber();
+    total = calculaDecimalParaBinario(second);
+    lcd.setCursor(0,1);
+    lcd.print(total);
+    second = 0;
+    break;
+
+
+  case 'C':
+    total = 0;
+    lcd.clear();
+    break;
+  }
 }
 
 void decimalToOctalCalculator() {
+  keyEntry();
+  switch(key) {
+  // case '0' ... '1': // This keeps collecting the first value until a operator is pressed "+-*/"
+  //   lcd.setCursor(0,0);
+  //   first = first * 10 + (key - '0');
+  //   lcd.print(first);
+  //   break;
 
+  case '=':
+    // first = (total != 0 ? total : first);
+    lcd.print("dec to octal");
+    second = SecondNumber();
+    total = calculaDecimalParaOctal(second);
+    lcd.setCursor(0,1);
+    lcd.print(total);
+    second = 0;
+    break;
+
+
+  case 'C':
+    total = 0;
+    lcd.clear();
+    break;
+  }
 }
 
 void binaryToDecimalCalculator() {
+  keyEntry();
+  switch(key) {
+  // case '0' ... '1': // This keeps collecting the first value until a operator is pressed "+-*/"
+  //   lcd.setCursor(0,0);
+  //   first = first * 10 + (key - '0');
+  //   lcd.print(first);
+  //   break;
 
+  case '=':
+    // first = (total != 0 ? total : first);
+    lcd.print("bin to dec");
+    second = SecondNumber();
+    total = calculaBinarioParaDecimal(second);
+    lcd.setCursor(0,1);
+    lcd.print(total);
+    second = 0;
+    break;
+
+
+  case 'C':
+    total = 0;
+    lcd.clear();
+    break;
+  }
 }
 
 void binaryToOctalCalculator() {
