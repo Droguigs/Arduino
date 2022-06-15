@@ -1,18 +1,13 @@
-// C++ code
-//
-//#include <stdlib.h>
 #include <Wire.h>
 #include <Adafruit_NeoPixel.h>
 #include <Keypad.h>
-#include <SoftwareSerial.h>
 
-#define rxPin A4
-#define txPin A5
+#define MY_ADRRESS 2
+#define OTHER_ADDRESS 1
 
-#define PIN 4   // input pin Neopixel is attached to
-#define NUMPIXELS 12 // number of neopixels in Ring
-
-SoftwareSerial mySerial = SoftwareSerial(rxPin, txPin);
+// Neopixel first pin and size
+#define PIN 4
+#define NUMPIXELS 4
 
 Adafruit_NeoPixel pixels0 = Adafruit_NeoPixel(NUMPIXELS, PIN+2, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel pixels1 = Adafruit_NeoPixel(NUMPIXELS, PIN+1, NEO_GRB + NEO_KHZ800);
@@ -45,17 +40,34 @@ int pontuacao_jogador1 = 0;
 int pontuacao_jogador2 = 0;
 
 //Posicoes
-char celulas[] = {};
+char celulas[] = {'a','a','a','a','a','a','a','a','a'};
 
-bool jogador1;
-bool jogador2;
+bool jogador1 = false;
+bool jogador2 = false;
 
 volatile int vitoria = 0;
 
+bool waiting_for_message = false;
+
+//Functions declare
+void startSorteio();
+char escolhePosicao();
+void checkPosicao(char pos);
+void marcarPosicao(char porta);
+void joga_1();
+void joga_2();
+void alterna_vez();
+void vez();
+void mostrarPontuacao();
+void checaVitoria();
+void pararExecucao();
+void receiveEvent(int howMany);
+
 void setup() {
   Serial.begin(9600);
-  mySerial.begin(9600);
-  // Initializes the NeoPixel library.
+  Wire.begin(MY_ADRRESS);
+  Wire.onReceive(receiveEvent);
+
   pixels0.begin();
   pixels0.Color(0,0,255);
   pixels1.begin();
@@ -64,8 +76,6 @@ void setup() {
   pixels2.Color(0,0,255);
 
   pinMode(13, OUTPUT);
-  pinMode(rxPin, INPUT);
-  pinMode(txPin, OUTPUT);
 }
 
 //sorteio
@@ -94,20 +104,20 @@ char escolhePosicao() {
   while (key == NO_KEY) {
     key = keypad.getKey();
   }
-
   return key;
 }
 
 void checkPosicao(char pos) {
   int i = 0;
   bool valido = true;
-  while (celulas[i]) {
-    if (pos == celulas[i]) {
-      valido = false;
+  for(i = 1; valido && i<=9; i++) {
+    if (pos == (i+48)) {
+      if(celulas[i-1] == 'f')
+      	valido = false;
+      else
+        i = 10;
     }
-    i++;
   }
-
   if (valido) {
     marcarPosicao(pos);
   } else {
@@ -177,62 +187,29 @@ void marcarPosicao(char porta) {
 
 void joga_1() {
   // recebe
-  while (mySerial.available() == 0) { } // termina com a chegada do primeiro byte
-  delay(1000); // espera o restante dos bytes
-  int N = mySerial.available(); // número total de bytes recebidos
-
-  int contador = 0;
-
-  while (contador < N-1) {
-  	contador++;
-  	Serial.print('[');
-  	Serial.print(contador);
-  	Serial.print(']');
-
-  	char c = mySerial.read();
-  	Serial.print('[');
-  	Serial.print(c);
-  	Serial.print(']');
-  	Serial.print(" (ainda disponivel: ");
-  	Serial.print(mySerial.available());
-  	Serial.println(')');
-  }
-
-  char charc = mySerial.read();
-
-  if (charc == 's') {
-    Serial.println("JOGADOR 2 REPETE A JOGADA");
-    joga_2();
-  } else if (charc >= '0' && charc <= '9') {
-    marcarPosicao(charc);
-    Serial.println("JOGADOR 2 RECEBEU VALIDO");
-
-    joga_2();
-  } else if (charc == 'f') {
-    Serial.println("JOGADOR 2 RECEBEU VALIDO");
-    vitoria = 1;
-    Serial.println("Vitoria do jogador 1");
-    pontuacao_jogador1 +=1;
-    mostrarPontuacao();
-    pararExecucao();
-  }
+  Serial.println("Vez do jogador 1: ");
+  while (waiting_for_message) { delay(1000); } // espera o restante dos bytes
 }
 
 void joga_2() {
-  Serial.println(" vez do jogador 2: ");
+  Serial.println("Vez do jogador 2: ");
   checkPosicao(escolhePosicao());
   // envia
-  mySerial.print(key);
   checaVitoria();
   alterna_vez();
  }
 
 //jogador 2
 void alterna_vez() {
-  Serial.println("vez do jogador 1: ");
-  key = NULL;
-  jogador1 = true;
-  jogador2 = false;
+  if (jogador1) {
+    key = NULL;
+    jogador1 = false;
+    jogador2 = true;
+  } else {
+    key = NULL;
+    jogador1 = true;
+    jogador2 = false;
+  }
   vez();
 }
 
@@ -256,123 +233,181 @@ void mostrarPontuacao() {
 
 // vitoria
 void checaVitoria() {
+  Wire.beginTransmission(OTHER_ADDRESS);
   //horizontal
   if((celulas[0] == '1') && (celulas[1] == '2') && (celulas[2] == '3')) {
-    if(pixels.getPixelColor(0) == pixels.getPixelColor(1) &&
-       pixels.getPixelColor(0) == pixels.getPixelColor(2)) {
-    	vitoria = 1;
-    	Serial.println("Vitoria do jogador 2 na horizontal1");
-
-        mySerial.print('f');
-
-        pontuacao_jogador2 +=1;
-        mostrarPontuacao();
-    	pararExecucao();
-    }
-  }
-
-  if((celulas[3] == '4') && (celulas[4] == '5') && (celulas[5] == '6')) {
-     if(pixels.getPixelColor(4) == pixels.getPixelColor(5) &&
-        pixels.getPixelColor(4) == pixels.getPixelColor(6)) {
-       //horizontal2
-       vitoria = 1;
-       Serial.println("Vitoria do jogador 2 na horizontal2");
-       mySerial.print('f');
-       pontuacao_jogador2 +=1;
-       mostrarPontuacao();
-       pararExecucao();
-     }
-  }
-
-  if((celulas[6] == '7') && (celulas[7] == '8') && (celulas[8] == '9')) {
-     if(pixels.getPixelColor(8)== pixels.getPixelColor(9) &&
-        pixels.getPixelColor(8)== pixels.getPixelColor(10)) {
-       //horizontal3
-       vitoria = 1;
-       Serial.println("Vitoria do jogador 2 na horizontal3");
-       mySerial.print('f');
-       pontuacao_jogador2 +=1;
-       mostrarPontuacao();
-       pararExecucao();
-     }
-  }
-
-  if((celulas[0] == '1') && (celulas[3] == '4') && (celulas[6] == '7')) {
-     if(pixels.getPixelColor(0)== pixels.getPixelColor(4) &&
-        pixels.getPixelColor(0)== pixels.getPixelColor(8)) {
-      //vertical1
-      vitoria = 1;
-      Serial.println("Vitoria do jogador 2 na vertical1");
-      mySerial.print('f');
-      pontuacao_jogador2 +=1;
-      mostrarPontuacao();
-      pararExecucao();
-     }
-  }
-
-  if((celulas[1] == '2') && (celulas[4] == '5') && (celulas[7] == '8')) {
-     if(pixels.getPixelColor(1)== pixels.getPixelColor(5) &&
-        pixels.getPixelColor(1)== pixels.getPixelColor(9)) {
-      //vertical2
-      vitoria = 1;
-      Serial.println("Vitoria do jogador 2 na vertical2");
-      mySerial.print('f');
-      pontuacao_jogador2 +=1;
-      mostrarPontuacao();
-      pararExecucao();
-     }
-  }
-
-  if((celulas[2] == '3') && (celulas[5] == '6') && (celulas[8] == '9')) {
-     if(pixels.getPixelColor(2)== pixels.getPixelColor(6) &&
-        pixels.getPixelColor(2)== pixels.getPixelColor(10)) {
-      //vertical3
-      vitoria = 1;
-      Serial.println("Vitoria do jogador 2 na vertical3");
-      mySerial.print('f');
-      pontuacao_jogador2 +=1;
-      mostrarPontuacao();
-      pararExecucao();
-     }
-  }
-
-  if((celulas[0] == '1') && (celulas[4] == '5') && (celulas[8] == '9')) {
-     if(pixels.getPixelColor(0)== pixels.getPixelColor(5) &&
-        pixels.getPixelColor(0)== pixels.getPixelColor(10)) {
-      //diagonal1
-      vitoria = 1;
-      Serial.println("Vitoria do jogador 2 na diagonal1");
-      mySerial.print('f');
-      pontuacao_jogador2 +=1;
-      mostrarPontuacao();
-      pararExecucao();
-     }
-  }
-
-  if((celulas[6] == '7') && (celulas[4] == '5') && (celulas[2] == '3')) {
-     if(pixels.getPixelColor(8) == pixels.getPixelColor(5) &&
-        pixels.getPixelColor(8) == pixels.getPixelColor(2)) {
-      //diagonal2
-      vitoria = 1;
-      Serial.println("Vitoria do jogador 2 na diagonal2");
-      mySerial.print('f');
-      pontuacao_jogador2 +=1;
-      mostrarPontuacao();
-      pararExecucao();
-     }
-  }
-
-  if((celulas[0] == '1') && (celulas[1] == '2') && (celulas[2] == '3') &&
-     (celulas[3] == '4') && (celulas[4] == '5') && (celulas[5] == '6') &&
-     (celulas[6] == '7') && (celulas[7] == '8') && (celulas[8] == '9')) {
+    //horizontal 1
     vitoria = 1;
-    Serial.println("Deu velha!");
+    Serial.println("Vitoria do jogador 2 na horizontal 1");
+    Wire.write(key);
+    Wire.write('f');
+    pontuacao_jogador2++;
+    mostrarPontuacao();
+  	pararExecucao();
+  } else if((celulas[3] == '4') && (celulas[4] == '5') && (celulas[5] == '6')) {
+    //horizontal 2
+    vitoria = 1;
+    Serial.println("Vitoria do jogador 2 na horizontal 2");
+    Wire.write(key);
+    Wire.write('f');
+    pontuacao_jogador2++;
     mostrarPontuacao();
     pararExecucao();
+  } else if((celulas[6] == '7') && (celulas[7] == '8') && (celulas[8] == '9')) {
+    //horizontal 3
+    vitoria = 1;
+    Serial.println("Vitoria do jogador 2 na horizontal 3");
+    Wire.write(key);
+    Wire.write('f');
+    pontuacao_jogador2++;
+    mostrarPontuacao();
+    pararExecucao();
+  } else if((celulas[0] == '1') && (celulas[3] == '4') && (celulas[6] == '7')) {
+    //vertical 1
+    vitoria = 1;
+    Serial.println("Vitoria do jogador 2 na vertical 1");
+    Wire.write(key);
+    Wire.write('f');
+    pontuacao_jogador2++;
+    mostrarPontuacao();
+    pararExecucao();
+  } else if((celulas[1] == '2') && (celulas[4] == '5') && (celulas[7] == '8')) {
+    //vertical 2
+    vitoria = 1;
+    Serial.println("Vitoria do jogador 2 na vertical 2");
+    Wire.write(key);
+    Wire.write('f');
+    pontuacao_jogador2++;
+    mostrarPontuacao();
+    pararExecucao();
+  } else if((celulas[2] == '3') && (celulas[5] == '6') && (celulas[8] == '9')) {
+    //vertical 3
+    vitoria = 1;
+    Serial.println("Vitoria do jogador 2 na vertical 3");
+    Wire.write(key);
+    Wire.write('f');
+    pontuacao_jogador2++;
+    mostrarPontuacao();
+    pararExecucao();
+  } else if((celulas[0] == '1') && (celulas[4] == '5') && (celulas[8] == '9')) {
+    //diagonal 1
+    vitoria = 1;
+    Serial.println("Vitoria do jogador 2 na diagonal 1");
+    Wire.write(key);
+    Wire.write('f');
+    pontuacao_jogador2++;
+    mostrarPontuacao();
+    pararExecucao();
+  } else if((celulas[6] == '7') && (celulas[4] == '5') && (celulas[2] == '3')) {
+    //diagonal 2
+    vitoria = 1;
+    Serial.println("Vitoria do jogador 2 na diagonal 2");
+    Wire.write(key);
+    Wire.write('f');
+    pontuacao_jogador2++;
+    mostrarPontuacao();
+    pararExecucao();
+  } else if((celulas[0] == '1' || celulas[0] == 'f') &&
+            (celulas[1] == '2' || celulas[1] == 'f') &&
+            (celulas[2] == '3' || celulas[2] == 'f') &&
+            (celulas[3] == '4' || celulas[3] == 'f') &&
+            (celulas[4] == '5' || celulas[4] == 'f') &&
+            (celulas[5] == '6' || celulas[5] == 'f') &&
+            (celulas[6] == '7' || celulas[6] == 'f') &&
+            (celulas[7] == '8' || celulas[7] == 'f') &&
+            (celulas[8] == '9' || celulas[8] == 'f')) {
+    vitoria = 1;
+    Serial.println("Deu velha!");
+    Wire.write(key);
+    Wire.write('v');
+    mostrarPontuacao();
+    pararExecucao();
+  } else {
+    Wire.write(key);
+    Wire.write('n');
+  }
+  Wire.endTransmission();
+}
+
+//Recebe os dados da Wire
+void receiveEvent(int howMany) {
+  int pos = Wire.read();
+  switch (pos) {
+    case '1':
+      Serial.println("Jogador 1 escolheu - (1,1)");
+      celulas[0] = 'f';
+      pixels0.setPixelColor(0, pixels0.Color(0, 200, 0));
+      pixels0.show();
+      break;
+    case '2':
+      Serial.println("Jogador 1 escolheu - (1,2)");
+      celulas[1] = 'f';
+      pixels0.setPixelColor(1, pixels0.Color(0, 200, 0));
+      pixels0.show();
+      break;
+    case '3':
+      Serial.println("Jogador 1 escolheu - (1,3)");
+      celulas[2] = 'f';
+      pixels0.setPixelColor(2, pixels0.Color(0, 200, 0));
+      pixels0.show();
+      break;
+    case '4':
+      Serial.println("Jogador 1 escolheu - (2,1)");
+      celulas[3] = 'f';
+      pixels1.setPixelColor(0, pixels1.Color(0, 200, 0));
+      pixels1.show();
+      break;
+    case '5':
+      Serial.println("Jogador 1 escolheu - (2,2)");
+      celulas[4] = 'f';
+      pixels1.setPixelColor(1, pixels1.Color(0, 200, 0));
+      pixels1.show();
+      break;
+    case '6':
+      Serial.println("Jogador 1 escolheu - (2,3)");
+      celulas[5] = 'f';
+      pixels1.setPixelColor(2, pixels1.Color(0, 200, 0));
+      pixels1.show();
+      break;
+    case '7':
+      Serial.println("Jogador 1 escolheu - (3,1)");
+      celulas[6] = 'f';
+      pixels2.setPixelColor(0, pixels2.Color(0, 200, 0));
+      pixels2.show();
+      break;
+    case '8':
+      Serial.println("Jogador 1 escolheu - (3,2)");
+      celulas[7] = 'f';
+      pixels2.setPixelColor(1, pixels2.Color(0, 200, 0));
+      pixels2.show();
+      break;
+    case '9':
+      Serial.println("Jogador 1 escolheu - (3,3)");
+      celulas[8] = 'f';
+      pixels2.setPixelColor(2, pixels2.Color(0, 200, 0));
+      pixels2.show();
+      break;
+  }
+
+  char c = Wire.read();    // receive byte as an integer
+  if (c == 'f') {
+    vitoria = 1;
+    Serial.println("Vitoria do jogador 2");
+    pontuacao_jogador2++;
+    mostrarPontuacao();
+    pararExecucao();
+  } else if (c == 'v') {
+    vitoria = 1;
+    Serial.println("DEU VELHA!");
+    mostrarPontuacao();
+    pararExecucao();
+  } else {
+    alterna_vez();
   }
 }
 
 void pararExecucao() {
+  waiting_for_message = false;
   while(vitoria == 1);
 }
 
